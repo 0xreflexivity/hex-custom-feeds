@@ -18,8 +18,8 @@ const FEED_SYMBOL = "yUSDX";
 // Clearpool X-Pool vault address on Flare mainnet
 const MAINNET_VAULT_ADDRESS = "0xd006185B765cA59F29FDd0c57526309726b69d99";
 
-// Mock API URL (local development) - for production, use HT Markets API
-const LOCAL_API_URL = "http://localhost:3000/api/v1/xpool/nav";
+// GitHub Pages static API for testnet, HT Markets API for production
+const TESTNET_API_URL = "https://amadiaflare.github.io/hex-custom-feeds/api/v1/xpool/nav.json";
 const PRODUCTION_API_URL = "https://api.htmarkets.com/api/v1/xpool/nav";
 
 // Initial mock rate for testnet (e.g., $1.05 = 1.05e18)
@@ -226,7 +226,7 @@ async function main() {
 
     // Determine API URL based on network
     const chainId = await web3.eth.getChainId();
-    const apiUrl = chainId === 14 ? PRODUCTION_API_URL : LOCAL_API_URL;
+    const apiUrl = chainId === 14 ? PRODUCTION_API_URL : TESTNET_API_URL;
 
     // Step 1: Get or deploy vault
     console.log("Step 1: Getting vault address...\n");
@@ -273,9 +273,9 @@ async function main() {
     } catch (error: any) {
         console.log(`FDC attestation failed: ${error.message}`);
         console.log("\nMake sure:");
-        console.log("  1. The mock API server is running: cd fdc-demo/api && npm start");
-        console.log("  2. Environment variables are set correctly");
-        console.log("  3. The API URL is accessible from the FDC verifiers\n");
+        console.log("  1. Environment variables are set correctly in .env");
+        console.log("  2. The API URL is accessible from the FDC verifiers");
+        console.log("  3. GitHub Pages is deployed: https://amadiaflare.github.io/hex-custom-feeds/\n");
     }
 
     console.log("=== Deployment Complete ===");

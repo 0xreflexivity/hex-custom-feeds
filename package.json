@@ -20,7 +20,8 @@
         "compile": "hardhat compile",
         "deploy:cusdx": "hardhat run scripts/customFeeds/cUSDXVerification.ts",
         "deploy:yusdx": "hardhat run scripts/customFeeds/yUSDXVerification.ts",
-        "deploy:yusdx-fdc": "hardhat run scripts/customFeeds/yUSDXFDCVerification.ts"
+        "deploy:yusdx-fdc": "hardhat run scripts/customFeeds/yUSDXFDCVerification.ts",
+        "test": "hardhat test"
     },
     "devDependencies": {
         "@eslint/compat": "^1.4.0",

@@ -47,14 +47,26 @@ function read() public view returns (uint256) {
 
 Uses Flare Data Connector (FDC) to verify off-chain NAV data from multiple attestation providers.
 
+**Security Features:**
+- HTTPS-only URL enforcement
+- Allowlist-based host validation (case-insensitive)
+- Path prefix validation to prevent injection attacks
+- NAV bounds checking ($0.80 - $1.20)
+- ETH refund on payable interface
+
 ```solidity
 function updateNavWithFDC(IWeb2Json.Proof calldata _proof) external {
-    // 1. Verify proof against FDC merkle root
-    // 2. Decode navScaled from response
-    // 3. Validate NAV within bounds (80% - 120%)
-    // 4. Update state
+    // 1. Validate URL (HTTPS, allowed host, correct path prefix)
+    // 2. Verify FDC proof cryptographically
+    // 3. Decode navScaled from response
+    // 4. Validate NAV within bounds (80% - 120%)
+    // 5. Update state
 }
 ```
+
+**Allowed API Sources:**
+- GitHub Pages: `amadiaflare.github.io/hex-custom-feeds/api/v1/xpool/nav`
+- Production: `api.htmarkets.com/api/v1/xpool/nav` *(placeholder - not yet available)*
 
 ## Setup
 
@@ -64,6 +76,16 @@ cd hex-custom-feeds
 yarn install
 cp .env.example .env  # Configure your keys
 yarn compile
+```
+
+## Testing
+
+```bash
+# Run all tests
+yarn test
+
+# Run security tests only
+npx hardhat test test/yUSDXCustomFeedFDC.security.test.ts
 ```
 
 ## Deployment

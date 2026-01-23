@@ -20,7 +20,7 @@ const MAINNET_VAULT_ADDRESS = "0xd006185B765cA59F29FDd0c57526309726b69d99";
 
 // GitHub Pages static API for testnet, HT Markets API for production
 const TESTNET_API_URL = "https://amadiaflare.github.io/hex-custom-feeds/api/v1/xpool/nav.json";
-const PRODUCTION_API_URL = "https://api.htmarkets.com/api/v1/xpool/nav";
+const PRODUCTION_API_URL = "https://api.htmarkets.com/api/v1/xpool/nav"; // example production api
 
 // Initial mock rate for testnet (e.g., $1.05 = 1.05e18)
 const MOCK_INITIAL_RATE = web3.utils.toWei("1.05", "ether");
@@ -60,7 +60,7 @@ async function prepareAttestationRequest(apiUrl: string) {
     const url = `${verifierUrlBase}/Web2Json/prepareRequest`;
     const apiKey = VERIFIER_API_KEY_TESTNET;
 
-    return await prepareAttestationRequestBase(url, apiKey!, attestationTypeBase, sourceIdBase, requestBody);
+    return await prepareAttestationRequestBase(url, apiKey ?? "", attestationTypeBase, sourceIdBase, requestBody);
 }
 
 /**
@@ -105,7 +105,7 @@ async function getVaultAddress(): Promise<string> {
 /**
  * Deploys and verifies the yUSDXCustomFeedFDC contract
  */
-async function deployAndVerifyContract(vaultAddress: string, apiUrl: string) {
+async function deployAndVerifyContract(vaultAddress: string) {
     const feedIdString = `${FEED_SYMBOL}/USD`;
     const feedNameHash = web3.utils.keccak256(feedIdString);
     const finalFeedIdHex = `0x21${feedNameHash.substring(2, 42)}`;
@@ -113,9 +113,8 @@ async function deployAndVerifyContract(vaultAddress: string, apiUrl: string) {
     console.log(`\nDeploying yUSDXCustomFeedFDC...`);
     console.log(`Feed ID: ${finalFeedIdHex}`);
     console.log(`Vault address: ${vaultAddress}`);
-    console.log(`API URL: ${apiUrl}`);
 
-    const customFeedArgs: any[] = [finalFeedIdHex, vaultAddress, apiUrl];
+    const customFeedArgs: any[] = [finalFeedIdHex, vaultAddress];
     const customFeed = await yUSDXCustomFeedFDC.new(...customFeedArgs);
     console.log(`yUSDXCustomFeedFDC deployed to: ${customFeed.address}\n`);
 
@@ -169,28 +168,6 @@ async function updateWithFDCProof(customFeed: any, proof: any) {
 }
 
 /**
- * Tests the fallback vault update method
- */
-async function testVaultFallback(customFeed: any) {
-    console.log("=== Testing Vault Fallback ===\n");
-
-    try {
-        console.log("Calling updateNavFromVault()...");
-        const tx = await customFeed.updateNavFromVault();
-        console.log(`Transaction: ${tx.tx}`);
-
-        const { _value, _decimals, _timestamp } = await customFeed.getFeedDataView();
-        const price = Number(_value) / 10 ** Number(_decimals);
-        const updateTime = new Date(Number(_timestamp) * 1000).toISOString();
-
-        console.log(`Updated NAV: ${price.toFixed(6)} USD`);
-        console.log(`Last update: ${updateTime}\n`);
-    } catch (error: any) {
-        console.log(`Vault fallback failed: ${error.message}\n`);
-    }
-}
-
-/**
  * Tests basic contract functionality
  */
 async function testBasicFunctionality(customFeed: any) {
@@ -203,9 +180,6 @@ async function testBasicFunctionality(customFeed: any) {
 
     const feedIdResult = await customFeed.feedId();
     console.log(`feedId() -> ${feedIdResult}`);
-
-    const isStale = await customFeed.isDataStale();
-    console.log(`isDataStale() -> ${isStale}`);
 
     const updateCount = await customFeed.updateCount();
     console.log(`updateCount() -> ${updateCount.toString()}\n`);
@@ -234,20 +208,14 @@ async function main() {
 
     // Step 2: Deploy FDC custom feed
     console.log("Step 2: Deploying yUSDXCustomFeedFDC...\n");
-    const customFeed = await deployAndVerifyContract(vaultAddress, apiUrl);
+    const customFeed = await deployAndVerifyContract(vaultAddress);
 
     // Step 3: Test basic functionality
     console.log("Step 3: Testing basic functionality...\n");
     await testBasicFunctionality(customFeed);
 
-    // Step 4: Test vault fallback first (if on testnet)
-    if (chainId !== 14) {
-        console.log("Step 4: Testing vault fallback...\n");
-        await testVaultFallback(customFeed);
-    }
-
-    // Step 5: Prepare and submit FDC attestation request
-    console.log("Step 5: Preparing FDC attestation request...\n");
+    // Step 4: Prepare and submit FDC attestation request
+    console.log("Step 4: Preparing FDC attestation request...\n");
     console.log(`API URL: ${apiUrl}`);
     console.log(`JQ Filter: ${postProcessJq}`);
     console.log(`ABI Signature: ${abiSignature}\n`);
@@ -258,18 +226,17 @@ async function main() {
 
         const abiEncodedRequest = data.abiEncodedRequest;
 
-        // Step 6: Submit to FDC Hub
-        console.log("Step 6: Submitting to FDC Hub...\n");
+        // Step 5: Submit to FDC Hub
+        console.log("Step 5: Submitting to FDC Hub...\n");
         const roundId = await submitAttestationRequest(abiEncodedRequest);
 
-        // Step 7: Wait for proof and retrieve it
-        console.log("Step 7: Waiting for round finalization and proof...\n");
+        // Step 6: Wait for proof and retrieve it
+        console.log("Step 6: Waiting for round finalization and proof...\n");
         const proof = await retrieveDataAndProof(abiEncodedRequest, roundId);
 
-        // Step 8: Update contract with verified data
-        console.log("Step 8: Updating contract with FDC proof...\n");
+        // Step 7: Update contract with verified data
+        console.log("Step 7: Updating contract with FDC proof...\n");
         await updateWithFDCProof(customFeed, proof);
-
     } catch (error: any) {
         console.log(`FDC attestation failed: ${error.message}`);
         console.log("\nMake sure:");
@@ -281,12 +248,13 @@ async function main() {
     console.log("=== Deployment Complete ===");
     console.log(`Contract: ${customFeed.address}`);
     console.log(`Vault: ${vaultAddress}`);
-    console.log(`API URL: ${apiUrl}`);
 }
 
-void main().then(() => {
-    process.exit(0);
-}).catch((error) => {
-    console.error(error);
-    process.exit(1);
-});
+void main()
+    .then(() => {
+        process.exit(0);
+    })
+    .catch((error) => {
+        console.error(error);
+        process.exit(1);
+    });

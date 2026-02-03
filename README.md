@@ -6,67 +6,45 @@ Custom FTSO price feeds for **cUSDX/USD** and **yUSDX/USD** on Flare Network.
 
 | Feed | Description | Data Source |
 |------|-------------|-------------|
-| **cUSDX/USD** | T-Pool LP token, 1:1 peg with USD | USDX/USD FTSO feed |
-| **yUSDX/USD** | X-Pool LP token, NAV-based pricing | Vault `getRate()` |
-| **yUSDX/USD (FDC)** | X-Pool with FDC verification | Off-chain API + FDC proof |
+| **cUSDX/USD (FDC)** | T-Pool LP token, 1:1 peg with USDX | USDX/USD FTSO + FDC reserve verification |
+| **yUSDX/USD (FDC)** | X-Pool LP token, NAV-based pricing | Vault `getRate()` + FDC NAV verification |
 
 ### Token Details
 
-- **cUSDX**: LP token from [T-Pool](https://clearpool.finance/lending/tpool) - invests in short-term US treasuries
-- **yUSDX**: LP token from [X-Pool](https://vaults.clearpool.finance/vault?address=0x6b9e9d89e0e9fd93eb95d8c7715be2a8de64af07) - delta-neutral basis trading strategy on CEXs
+- **cUSDX**: LP token from [T-Pool](https://clearpool.finance/lending/tpool) — invests in short-term US treasuries and bonds via HT Markets. Maintains 1:1 peg with USDX.
+- **yUSDX**: LP token from [X-Pool](https://vaults.clearpool.finance/vault?address=0x6b9e9d89e0e9fd93eb95d8c7715be2a8de64af07) — delta-neutral basis trading strategy on CEXs.
 
 NAV updates daily at 08:30 UTC.
 
 ## Contracts
 
-All contracts implement `IICustomFeed` interface.
+All contracts implement `IICustomFeed`.
 
-### cUSDXCustomFeed
+### CUSDXCustomFeedFDC
 
-Derives price from the existing USDX/USD FTSO feed (1:1 peg).
+Price feed for cUSDX/USD. Returns the USDX/USD price from FTSO (1:1 peg). Uses FDC Web2Json attestation to verify that off-chain reserves back on-chain cUSDX supply.
 
-```solidity
-function read() public view returns (uint256) {
-    (uint256 usdxPrice, , ) = ftsoV2.getFeedById(USDX_FEED_ID);
-    return usdxPrice; // cUSDX = USDX = $1.00
-}
+**Reserve Verification:**
+- Fetches `current_reserves_amount` from the [HT Digital Assets API](https://api.htdigitalassets.com/alm-stablecoin-db/metrics/current_reserves_amount)
+- FDC attestation providers independently verify the API response
+- Contract compares API reserves against on-chain `cUSDX.totalSupply()` to compute a reserve ratio
+- Reserve data is stored on-chain and queryable via `getReserveStatus()`
+
+**FDC jq filter:**
 ```
-
-### yUSDXCustomFeed
-
-Reads NAV directly from the X-Pool vault's `getRate()` function.
-
-```solidity
-function read() public view returns (uint256) {
-    uint256 rate = IVault(xPoolVault).getRate(); // 18 decimals
-    return rate / 1e12; // Convert to 6 decimals
-}
+{currentReservesAmount: (.value | split(",") | join("") | split(".") | .[0])}
 ```
+Returns reserves as a string (whole USD), parsed to `uint256` on-chain — the FDC verifier does not support `tonumber` or arithmetic operations.
 
-### yUSDXCustomFeedFDC
+### YUSDXCustomFeedFDC
 
-Uses Flare Data Connector (FDC) to verify off-chain NAV data from multiple attestation providers.
+Price feed for yUSDX/USD. Uses FDC to verify off-chain NAV data from multiple attestation providers.
 
-**Security Features:**
+**Security features (both contracts):**
 - HTTPS-only URL enforcement
 - Allowlist-based host validation (case-insensitive)
 - Path prefix validation to prevent injection attacks
-- NAV bounds checking ($0.80 - $1.20)
 - ETH refund on payable interface
-
-```solidity
-function updateNavWithFDC(IWeb2Json.Proof calldata _proof) external {
-    // 1. Validate URL (HTTPS, allowed host, correct path prefix)
-    // 2. Verify FDC proof cryptographically
-    // 3. Decode navScaled from response
-    // 4. Validate NAV within bounds (80% - 120%)
-    // 5. Update state
-}
-```
-
-**Allowed API Sources:**
-- GitHub Pages: `amadiaflare.github.io/hex-custom-feeds/api/v1/xpool/nav`
-- Production: `api.htmarkets.com/api/v1/xpool/nav` *(placeholder - not yet available)*
 
 ## Setup
 
@@ -74,71 +52,45 @@ function updateNavWithFDC(IWeb2Json.Proof calldata _proof) external {
 git clone https://github.com/AmadiaFlare/hex-custom-feeds.git
 cd hex-custom-feeds
 yarn install
-cp .env.example .env  # Configure your keys
+cp .env.example .env
 yarn compile
 ```
 
 ## Testing
 
 ```bash
-# Run all tests
 yarn test
-
-# Run security tests only
-npx hardhat test test/yUSDXCustomFeedFDC.security.test.ts
 ```
 
 ## Deployment
 
 ```bash
-# Deploy cUSDX feed
-yarn deploy:cusdx --network coston2
+# cUSDX FDC feed (deploy + attestation)
+yarn hardhat run scripts/customFeeds/cUSDXFDCVerification.ts --network coston2
 
-# Deploy yUSDX feed (vault-based)
-yarn deploy:yusdx --network coston2
-
-# Deploy yUSDX feed with FDC verification
-yarn deploy:yusdx-fdc --network coston2
+# yUSDX FDC feed
+yarn hardhat run scripts/customFeeds/yUSDXFDCVerification.ts --network coston2
 ```
-
-## Static API (GitHub Pages)
-
-For FDC testing, a static API is hosted at:
-
-```
-https://amadiaflare.github.io/hex-custom-feeds/api/v1/xpool/nav.json
-```
-
-FDC attestation config:
-```json
-{
-  "url": "https://amadiaflare.github.io/hex-custom-feeds/api/v1/xpool/nav.json",
-  "httpMethod": "GET",
-  "postProcessJq": "{navScaled: .data.navScaled}",
-  "abiSignature": "{\"components\": [{\"type\": \"uint256\", \"name\": \"navScaled\"}], \"type\": \"tuple\"}"
-}
-```
-
-## Contract Addresses (Coston2)
-
-| Contract | Address |
-|----------|---------|
-| yUSDXCustomFeedFDC | `0x59Dd88c88c7979A06825bab0f1D18F9c55e0Cc19` |
-| MockClearpoolVault | `0xacB86f3d6B50181c4ce9Bd97Bd7A1A261ae58BaF` |
 
 ## Environment Variables
 
 ```env
-PRIVATE_KEY=           # Deployer private key
-FLARESCAN_API_KEY=     # Contract verification
-VERIFIER_API_KEY_TESTNET=  # FDC verifier
+PRIVATE_KEY=
+FLARESCAN_API_KEY=
+VERIFIER_API_KEY_TESTNET=
+VERIFIER_API_KEY_MAINNET=
+WEB2JSON_VERIFIER_URL_TESTNET=https://fdc-verifiers-testnet.flare.network/verifier/web2
+WEB2JSON_VERIFIER_URL_MAINNET=https://fdc-verifiers-mainnet.flare.network/verifier/web2
 COSTON2_DA_LAYER_URL=https://ctn2-data-availability.flare.network
-WEB2JSON_VERIFIER_URL_TESTNET=https://web2json-verifier-test.flare.rocks
+FLARE_DA_LAYER_URL=https://flr-data-availability.flare.network
 ```
 
 ## References
 
+- [FDC Web2Json Attestation](https://dev.flare.network/fdc/attestation-types/web2-json)
+- [FDC Proof of Reserves Guide](https://dev.flare.network/fdc/guides/hardhat/proof-of-reserves)
 - [Custom Feed Guide](https://dev.flare.network/ftso/guides/create-custom-feed)
+- [cUSDX Token (T-Pool)](https://flarescan.com/address/0xfe2907dfa8db6e320cdbf45f0aa888f6135ec4f8)
 - [X-Pool Vault](https://mainnet.flarescan.com/address/0xd006185B765cA59F29FDd0c57526309726b69d99)
-- [cUSDX Token](https://flarescan.com/address/0xfe2907dfa8db6e320cdbf45f0aa888f6135ec4f8)
 - [USDX FTSO Feed](https://flare-systems-explorer.flare.network/price-feeds/ftso?feed=0x01555344582f555344000000000000000000000000)
+- [HT Digital Assets Reserves API](https://api.htdigitalassets.com/alm-stablecoin-db/metrics/current_reserves_amount)

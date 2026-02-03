@@ -41,7 +41,7 @@ struct NavData {
  *
  *      X-Pool vault: 0xd006185B765cA59F29FDd0c57526309726b69d99
  */
-contract yUSDXCustomFeedFDC is IICustomFeed {
+contract YUSDXCustomFeedFDC is IICustomFeed {
     // --- State Variables ---
 
     bytes21 public immutable feedIdentifier;

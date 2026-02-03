@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import { yUSDXCustomFeedFDC } from "../yUSDXCustomFeedFDC.sol";
+import { YUSDXCustomFeedFDC } from "../yUSDXCustomFeedFDC.sol";
 
 /**
- * @title yUSDXCustomFeedFDCHarness
+ * @title YUSDXCustomFeedFDCHarness
  * @notice Test harness to expose internal functions for testing
  */
-contract yUSDXCustomFeedFDCHarness is yUSDXCustomFeedFDC {
-    constructor(bytes21 _feedId, address _xPoolVault) yUSDXCustomFeedFDC(_feedId, _xPoolVault) {}
+contract YUSDXCustomFeedFDCHarness is YUSDXCustomFeedFDC {
+    constructor(bytes21 _feedId, address _xPoolVault) YUSDXCustomFeedFDC(_feedId, _xPoolVault) {}
 
     function exposed_extractHost(string memory _url) external pure returns (string memory) {
         return _extractHost(_url);

@@ -222,6 +222,9 @@ contract CUSDXCustomFeedFDC is IICustomFeed {
             reserveRatio = (reserves * 1000000 * (10 ** tokenDecimals)) / onChainSupply;
         }
 
+        // TODO: DO WHAT YOU WANT WITH THE RESERVE STATE WHEN YOU GET IT ON-CHAIN AFTER FDC VERIFICATION 
+        // THIS IS AN EXAMPLE ONLY. DO NOT DELPOY TO MAINNET UNTIL PERFORMING THE CORRECT RESERVE COMPUTATIONS
+
         // 6. Update verified state
         verifiedReserveRatio = reserveRatio;
         verifiedReservesAmount = reserves;

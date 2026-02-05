@@ -6,7 +6,9 @@ import {
 } from "../utils/fdc";
 
 const cUSDXCustomFeedFDC = artifacts.require("CUSDXCustomFeedFDC");
+const MockCUSDXToken = artifacts.require("MockCUSDXToken");
 
+// NOTE: THIS WILL NOT WORK ON MAINNET BECAUSE THE FDC VERIFIER IS NOT CONFIGURED WITH THE WEB2JSON TYPE
 const {
     WEB2JSON_VERIFIER_URL_TESTNET,
     WEB2JSON_VERIFIER_URL_MAINNET,
@@ -63,13 +65,15 @@ const body = "{}";
 // The FDC verifier's jq doesn't support tonumber/gsub/arithmetic
 // so we return a clean integer string and parse it in Solidity
 // Example: "41,842,373.09" -> "41842373"
-const postProcessJq = '{currentReservesAmount: (.value | split(",") | join("") | split(".") | .[0])}';
+// Round to nearest $100k to ensure FDC consensus despite minor API fluctuations
+const postProcessJq = '{currentReservesAmount: (.value | split(",") | join("") | split(".") | .[0] | .[:-5] + "00000")}';
 
 // ABI signature — string because FDC verifier can't produce numeric types
 const abiSignature = `{"components": [{"internalType": "string", "name": "currentReservesAmount", "type": "string"}], "internalType": "struct ReserveData", "name": "data", "type": "tuple"}`;
 
 /**
- * Gets the cUSDX token address based on the network
+ * Gets or deploys the cUSDX token address based on the network
+ * On testnet, deploys a mock token with supply matching current API reserves
  */
 async function getCUSDXTokenAddress(): Promise<string> {
     const chainId = await web3.eth.getChainId();
@@ -79,8 +83,31 @@ async function getCUSDXTokenAddress(): Promise<string> {
         return MAINNET_CUSDX_TOKEN;
     }
 
-    console.log(`Testnet detected (chainId: ${chainId}). Using mainnet cUSDX address for reference.`);
-    return MAINNET_CUSDX_TOKEN;
+    // Testnet: deploy mock token with realistic supply
+    // Fetch current reserves from API to set a matching mock supply
+    console.log(`Testnet detected (chainId: ${chainId}). Deploying mock cUSDX token...`);
+    
+    let mockSupply: string;
+    try {
+        const response = await fetch(API_URL);
+        const data = await response.json();
+        // Parse "44,442,373.09" -> 44442373090000 (6 decimals)
+        const reservesStr = data.value.replace(/,/g, "");
+        const reservesFloat = parseFloat(reservesStr);
+        // Convert to 6 decimals
+        mockSupply = Math.floor(reservesFloat * 1e6).toString();
+        console.log(`  API reserves: ${data.value} -> Mock supply: ${mockSupply} (6 decimals)`);
+    } catch (e) {
+        // Default to ~44M if API fails
+        mockSupply = "44000000000000"; // 44M with 6 decimals
+        console.log(`  API fetch failed, using default mock supply: ${mockSupply}`);
+    }
+
+    const mockToken = await MockCUSDXToken.new(mockSupply);
+    console.log(`  MockCUSDXToken deployed to: ${mockToken.address}`);
+    console.log(`  Total Supply: ${await mockToken.totalSupply()} (${await mockToken.decimals()} decimals)`);
+    
+    return mockToken.address;
 }
 
 /**
